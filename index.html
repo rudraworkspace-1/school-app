@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Central Public School</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body,#root{height:100%;}
+body{font-family:'Inter',sans-serif;background:#F0F2F8;overscroll-behavior:none;color:#0F172A;}
+input,textarea,button,select{font-family:'Inter',sans-serif;}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:4px;}
+
+/* Press feedback */
+.press{transition:transform .1s,opacity .1s;}
+.press:active{transform:scale(.96);opacity:.9;}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.fadeUp{animation:fadeUp .28s ease both;}
+.slideIn{animation:slideIn .22s ease both;}
+
+/* Stagger delays */
+.d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.15s}.d4{animation-delay:.2s}.d5{animation-delay:.25s}.d6{animation-delay:.3s}
+
+/* Custom focus */
+input:focus,textarea:focus,select:focus{outline:none;border-color:#4F46E5!important;box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+const SUPABASE_URL="https://incpyultrytymqkmyvkb.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluY3B5dWx0cnl0eW1xa215dmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NTgwNTQsImV4cCI6MjA5NzAzNDA1NH0.xe1oMY5k_kBVu5bCwy4kzLgj613_lpgDYvgqdec6NY8";
+const SCHOOL="Central Public School";
+const ADDR="Jaldhari Chowk, Madhubani";
+
+// ─── Design Tokens ─────────────────────────────────────────────────────────────
+const C={
+  // Primary – deep indigo
+  P:"#4F46E5", PD:"#3730A3", PL:"#EEF2FF",
+  // Surface
+  bg:"#F0F2F8", card:"#FFFFFF",
+  // Text
+  t1:"#0F172A", t2:"#475569", t3:"#94A3B8",
+  // Border
+  border:"#E2E8F0",
+  // Status
+  green:"#16A34A", greenL:"#DCFCE7",
+  red:"#DC2626", redL:"#FEE2E2",
+  amber:"#D97706", amberL:"#FEF3C7",
+  teal:"#0D9488", tealL:"#CCFBF1",
+  rose:"#E11D48", roseL:"#FFE4E6",
+  purple:"#7C3AED", purpleL:"#EDE9FE",
+  blue:"#2563EB", blueL:"#DBEAFE",
+  sky:"#0284C7", skyL:"#E0F2FE",
+};
+
+const api=async(table,method="GET",body=null,query="",prefer="")=>{
+  const h={apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json"};
+  if(prefer) h["Prefer"]=prefer;
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`,{method,headers:h,body:body?JSON.stringify(body):null});
+  if(method==="DELETE"||method==="PATCH") return null;
+  const t=await r.text(); return t?JSON.parse(t):[];
+};
+
+const parseXLSX=f=>new Promise((res,rej)=>{
+  const r=new FileReader();
+  r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:"binary"});const ws=wb.Sheets[wb.SheetNames[0]];res(XLSX.utils.sheet_to_json(ws));}catch(err){rej(err);}};
+  r.onerror=rej; r.readAsBinaryString(f);
+});
+
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+const Icon={
+  back:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>,
+  logout:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  user:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  bell:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  book:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  check:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  star:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  dollar:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  cal:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  chat:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  bus:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  profile:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  settings:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  eye:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  eyeOff:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+  trash:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
+  info:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  upload:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+  grad:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+  search:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+};
+
+// ─── Shared UI ─────────────────────────────────────────────────────────────────
+function Header({title,sub,onBack,accent=C.P}){
+  return(
+    <div style={{background:"#fff",borderBottom:`1px solid ${C.border}`,padding:"0 16px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:99,height:60}}>
+      {onBack&&(
+        <button onClick={onBack} style={{width:36,height:36,borderRadius:10,border:`1.5px solid ${C.border}`,background:"#fff",color:C.t1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+          {Icon.back}
+        </button>
+      )}
+      <div style={{flex:1,minWidth:0}}>
+        <p style={{fontSize:16,fontWeight:700,color:C.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title}</p>
+        {sub&&<p style={{fontSize:11,color:C.t3,marginTop:1}}>{sub}</p>}
+      </div>
+      <div style={{width:6,height:24,borderRadius:3,background:accent,flexShrink:0}}/>
+    </div>
+  );
+}
+
+function Pill({color,bg,children}){
+  return <span style={{background:bg,color,padding:"3px 10px",borderRadius:6,fontSize:11,fontWeight:600,display:"inline-block",letterSpacing:.3}}>{children}</span>;
+}
+
+function Card({children,style={},className=""}){
+  return <div className={className} style={{background:"#fff",borderRadius:16,padding:16,margin:"0 14px 10px",border:`1px solid ${C.border}`,...style}}>{children}</div>;
+}
+
+function EmptyState({msg,icon=Icon.info}){
+  return(
+    <div style={{textAlign:"center",padding:"52px 24px"}}>
+      <div style={{width:52,height:52,borderRadius:26,background:C.PL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",color:C.P}}>
+        {icon}
+      </div>
+      <p style={{color:C.t3,fontSize:14,fontWeight:500}}>{msg}</p>
+    </div>
+  );
+}
+
+function SectionLabel({children}){
+  return <p style={{fontSize:10,fontWeight:700,color:C.t3,letterSpacing:1.2,padding:"14px 14px 6px",textTransform:"uppercase"}}>{children}</p>;
+}
+
+function Btn({children,onClick,disabled,variant="primary",style={}}){
+  const base={width:"100%",padding:"13px 16px",borderRadius:12,border:"none",fontSize:14,fontWeight:600,cursor:disabled?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"opacity .15s"};
+  const vars={
+    primary:{background:disabled?"#CBD5E1":C.P,color:"#fff",boxShadow:disabled?"none":"0 2px 8px rgba(79,70,229,.3)"},
+    danger:{background:disabled?"#CBD5E1":C.red,color:"#fff",boxShadow:"none"},
+    ghost:{background:"transparent",color:C.t2,border:`1.5px solid ${C.border}`},
+  };
+  return <button onClick={onClick} disabled={disabled} style={{...base,...vars[variant],...style}}>{children}</button>;
+}
+
+function Input({label,value,onChange,placeholder,type="text",style={}}){
+  return(
+    <div style={{marginBottom:12}}>
+      {label&&<label style={{fontSize:12,fontWeight:600,color:C.t2,display:"block",marginBottom:5}}>{label}</label>}
+      <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+        style={{width:"100%",padding:"11px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,color:C.t1,background:"#fff",...style}}/>
+    </div>
+  );
+}
+
+// ─── TILES CONFIG ──────────────────────────────────────────────────────────────
+const TILES=[
+  {key:"announcements",label:"Announcements",color:"#EA580C",bg:C.amberL,icon:Icon.bell},
+  {key:"homework",label:"Homework",color:"#16A34A",bg:C.greenL,icon:Icon.book},
+  {key:"attendance",label:"Attendance",color:"#2563EB",bg:C.blueL,icon:Icon.check},
+  {key:"marks",label:"Marks",color:"#7C3AED",bg:C.purpleL,icon:Icon.star},
+  {key:"fees",label:"Fees",color:"#0D9488",bg:C.tealL,icon:Icon.dollar},
+  {key:"calendar",label:"Calendar",color:"#DB2777",bg:C.roseL,icon:Icon.cal},
+  {key:"comments",label:"Comments",color:"#0284C7",bg:C.skyL,icon:Icon.chat},
+  {key:"transport",label:"Transport",color:"#D97706",bg:C.amberL,icon:Icon.bus},
+  {key:"profile",label:"Profile",color:"#4338CA",bg:C.PL,icon:Icon.profile},
+  {key:"settings",label:"Settings",color:"#475569",bg:C.border,icon:Icon.settings},
+];
+
+// ─── LOGIN ─────────────────────────────────────────────────────────────────────
+function Login({onLogin}){
+  const [id,setId]=useState("");
+  const [pw,setPw]=useState("");
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [showPw,setShowPw]=useState(false);
+
+  const login=async()=>{
+    if(!id.trim()||!pw.trim()) return setErr("Please enter your ID and password");
+    setLoading(true); setErr("");
+    try{
+      const data=await api("users","GET",null,`?id=eq.${id.trim()}&password=eq.${pw.trim()}&select=*`);
+      if(!data||data.length===0) return setErr("Invalid ID or password");
+      localStorage.setItem("cps_user",JSON.stringify(data[0]));
+      onLogin(data[0]);
+    }catch{setErr("Connection error. Check your internet.");}
+    finally{setLoading(false);}
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#312E81 0%,#4338CA 45%,#6366F1 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative",overflow:"hidden"}}>
+      {/* Background patterns */}
+      <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,backgroundImage:"radial-gradient(circle at 20% 20%, rgba(255,255,255,.06) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255,255,255,.04) 0%, transparent 50%)"}}/>
+      <div style={{position:"absolute",top:-80,right:-80,width:240,height:240,border:"1px solid rgba(255,255,255,.08)",borderRadius:120}}/>
+      <div style={{position:"absolute",bottom:-60,left:-60,width:180,height:180,border:"1px solid rgba(255,255,255,.06)",borderRadius:90}}/>
+
+      {/* Logo */}
+      <div className="fadeUp" style={{position:"relative",zIndex:1,textAlign:"center",marginBottom:32}}>
+        <div style={{width:72,height:72,borderRadius:20,background:"rgba(255,255,255,.15)",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",color:"#fff"}}>
+          {Icon.grad}
+        </div>
+        <h1 style={{color:"#fff",fontSize:20,fontWeight:800,fontFamily:"'Outfit',sans-serif",letterSpacing:-.3}}>{SCHOOL}</h1>
+        <p style={{color:"rgba(255,255,255,.5)",fontSize:12,marginTop:4}}>{ADDR}</p>
+      </div>
+
+      {/* Card */}
+      <div className="fadeUp d2" style={{position:"relative",zIndex:1,background:"#fff",borderRadius:24,padding:28,width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,.25)"}}>
+        <p style={{fontFamily:"'Outfit',sans-serif",fontWeight:800,fontSize:22,color:C.t1,marginBottom:4}}>Sign in</p>
+        <p style={{fontSize:13,color:C.t3,marginBottom:24}}>Access your school account</p>
+
+        <Input label="Student / Admin ID" value={id} onChange={e=>setId(e.target.value)} placeholder="Enter your ID"/>
+
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:12,fontWeight:600,color:C.t2,display:"block",marginBottom:5}}>Password</label>
+          <div style={{position:"relative"}}>
+            <input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()}
+              placeholder="Enter password"
+              style={{width:"100%",padding:"11px 44px 11px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,color:C.t1,background:"#fff"}}/>
+            <button onClick={()=>setShowPw(!showPw)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.t3}}>
+              {showPw?Icon.eyeOff:Icon.eye}
+            </button>
+          </div>
+        </div>
+
+        {err&&<div style={{background:C.redL,borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:C.red,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>{Icon.info}{err}</div>}
+
+        <Btn onClick={login} disabled={loading}>{loading?"Signing in…":"Sign In"}</Btn>
+      </div>
+      <p className="fadeUp d3" style={{color:"rgba(255,255,255,.3)",fontSize:11,marginTop:20,position:"relative",zIndex:1}}>Free · Ad-free · Auto-save</p>
+    </div>
+  );
+}
+
+// ─── STUDENT DASHBOARD ─────────────────────────────────────────────────────────
+function StudentDash({user,onLogout}){
+  const [screen,setScreen]=useState(null);
+  const tiles=user.transport_opted?TILES:TILES.filter(t=>t.key!=="transport");
+  if(screen){const Comp=SCREENS[screen];return<Comp user={user} onBack={()=>setScreen(null)} onLogout={onLogout}/>;}
+
+  const rows=Math.ceil(tiles.length/3);
+
+  return(
+    <div style={{width:"100%",maxWidth:480,margin:"0 auto",height:"100dvh",background:C.bg,display:"flex",flexDirection:"column"}}>
+
+      {/* ── Top Bar ── */}
+      <div style={{background:"linear-gradient(135deg,#312E81 0%,#4338CA 60%,#6366F1 100%)",padding:"0 16px",height:58,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <p style={{color:"#fff",fontWeight:700,fontSize:15,fontFamily:"'Outfit',sans-serif"}}>{SCHOOL}</p>
+        <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:20,border:"1.5px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.12)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          {Icon.logout}<span>Logout</span>
+        </button>
+      </div>
+
+      {/* ── Hero Banner ── */}
+      <div style={{background:"linear-gradient(160deg,#3730A3 0%,#4338CA 50%,#4F46E5 100%)",padding:"20px 16px 22px",position:"relative",overflow:"hidden",flexShrink:0}}>
+        <div style={{position:"absolute",top:-50,right:-50,width:160,height:160,background:"rgba(255,255,255,.05)",borderRadius:80}}/>
+        <div style={{position:"absolute",bottom:-30,left:120,width:120,height:120,background:"rgba(255,255,255,.04)",borderRadius:60}}/>
+        <div style={{position:"relative",zIndex:1}}>
+          <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12,boxShadow:"0 4px 14px rgba(245,158,11,.4)",color:"#fff"}}>
+            {Icon.grad}
+          </div>
+          <p style={{color:"#fff",fontSize:19,fontWeight:800,fontFamily:"'Outfit',sans-serif",letterSpacing:-.2}}>{SCHOOL}</p>
+          <p style={{color:"rgba(255,255,255,.5)",fontSize:11,marginTop:2}}>{ADDR}</p>
+          <div style={{marginTop:12,display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.12)",borderRadius:20,padding:"5px 14px"}}>
+            <div style={{width:7,height:7,borderRadius:4,background:"#4ADE80",flexShrink:0}}/>
+            <span style={{color:"rgba(255,255,255,.9)",fontSize:12,fontWeight:600}}>{user.name||user.id}{user.class?` — Class ${user.class}`:""}{user.section?` ${user.section}`:""}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tile Grid — stretches to fill rest of screen ── */}
+      <div style={{flex:1,padding:"10px 12px 12px",display:"flex",flexDirection:"column",minHeight:0}}>
+        <p style={{fontSize:10,fontWeight:700,color:C.t3,letterSpacing:1.1,marginBottom:8,paddingLeft:2}}>QUICK ACCESS</p>
+        <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:`repeat(${rows},1fr)`,gap:9}}>
+          {tiles.map((t,i)=>(
+            <div key={t.key} className="press" onClick={()=>setScreen(t.key)}
+              style={{background:t.color,borderRadius:18,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer",boxShadow:`0 3px 10px ${t.color}55`}}>
+              <div style={{color:"#fff",opacity:.95}}>{t.icon}</div>
+              <span style={{fontSize:11,fontWeight:700,color:"#fff",textAlign:"center",lineHeight:1.2,letterSpacing:.1}}>{t.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ─── ANNOUNCEMENTS ─────────────────────────────────────────────────────────────
+function AnnouncementsScreen({onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("announcements","GET",null,"?order=date.desc").then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Notices" sub={SCHOOL} onBack={onBack} accent={C.amber}/>
+      <div style={{padding:"6px 0 24px"}}>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No announcements yet"/>:
+        data.map((a,i)=>(
+          <Card key={a.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:10}}>
+            <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+              <div style={{width:40,height:40,borderRadius:10,background:C.amberL,display:"flex",alignItems:"center",justifyContent:"center",color:C.amber,flexShrink:0}}>
+                {Icon.bell}
+              </div>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:14,color:C.t1}}>{a.title}</p>
+                {a.description&&<p style={{fontSize:13,color:C.t2,marginTop:4,lineHeight:1.6}}>{a.description}</p>}
+                <p style={{fontSize:11,color:C.t3,marginTop:8,fontWeight:500}}>{a.date}</p>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── HOMEWORK ──────────────────────────────────────────────────────────────────
+function HomeworkScreen({user,onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("homework","GET",null,`?or=(class.eq.${user.class},class.is.null)&order=due_date.asc`).then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Homework" sub={`Class ${user.class||""} ${user.section||""}`} onBack={onBack} accent={C.blue}/>
+      <div style={{padding:"6px 0 24px"}}>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No homework assigned"/>:
+        data.map((h,i)=>(
+          <Card key={h.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <Pill color={C.blue} bg={C.blueL}>{h.subject}</Pill>
+              {h.due_date&&<span style={{fontSize:11,color:C.t3,fontWeight:500}}>Due {h.due_date}</span>}
+            </div>
+            <p style={{fontSize:14,color:C.t1,lineHeight:1.6,fontWeight:500}}>{h.task}</p>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── ATTENDANCE ────────────────────────────────────────────────────────────────
+function AttendanceScreen({user,onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("attendance","GET",null,`?student_id=eq.${user.id}&order=date.desc`).then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  const total=data.length, present=data.filter(a=>a.status==="Present").length, pct=total?Math.round((present/total)*100):0;
+  const good=pct>=75;
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Attendance" sub={user.name||user.id} onBack={onBack} accent={C.teal}/>
+      {data.length>0&&(
+        <div style={{margin:"14px 14px 0",background:"#fff",borderRadius:16,padding:16,border:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div>
+              <p style={{fontSize:28,fontWeight:800,color:C.t1,fontFamily:"'Outfit',sans-serif"}}>{pct}%</p>
+              <p style={{fontSize:12,color:C.t3,marginTop:2}}>{present} of {total} days present</p>
+            </div>
+            <div style={{width:52,height:52,borderRadius:26,background:good?C.greenL:C.redL,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:18,fontWeight:800,color:good?C.green:C.red}}>{pct}%</span>
+            </div>
+          </div>
+          <div style={{height:6,background:C.border,borderRadius:4,overflow:"hidden"}}>
+            <div style={{height:6,width:`${pct}%`,background:good?C.green:C.red,borderRadius:4,transition:"width .6s ease"}}/>
+          </div>
+          <p style={{fontSize:11,color:good?C.green:C.red,fontWeight:600,marginTop:8}}>
+            {good?"Good attendance — keep it up!":"Below 75% — attendance needs improvement"}
+          </p>
+        </div>
+      )}
+      {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No records found"/>:
+      <Card style={{marginTop:10}}>
+        {data.map((a,i)=>{
+          const col=a.status==="Present"?C.green:a.status==="Late"?C.amber:C.red;
+          const bg=a.status==="Present"?C.greenL:a.status==="Late"?C.amberL:C.redL;
+          return(
+            <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<data.length-1?`1px solid ${C.border}`:"none"}}>
+              <span style={{fontSize:13,color:C.t2,fontWeight:500}}>{a.date}</span>
+              <Pill color={col} bg={bg}>{a.status}</Pill>
+            </div>
+          );
+        })}
+      </Card>}
+      <div style={{paddingBottom:24}}/>
+    </div>
+  );
+}
+
+// ─── MARKS ─────────────────────────────────────────────────────────────────────
+function MarksScreen({user,onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("marks","GET",null,`?student_id=eq.${user.id}&order=created_at.desc`).then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Marks" sub={user.name||user.id} onBack={onBack} accent={C.purple}/>
+      <div style={{padding:"6px 0 24px"}}>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No marks recorded yet"/>:
+        data.map((m,i)=>{
+          const pct=m.total_marks?Math.round((m.marks_obtained/m.total_marks)*100):0;
+          const [col,bg]=pct>=75?[C.green,C.greenL]:pct>=50?[C.amber,C.amberL]:[C.red,C.redL];
+          return(
+            <Card key={m.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div>
+                  <p style={{fontWeight:700,fontSize:15,color:C.t1}}>{m.subject}</p>
+                  {m.exam_type&&<p style={{fontSize:11,color:C.t3,marginTop:2}}>{m.exam_type}</p>}
+                </div>
+                <div style={{background:bg,borderRadius:10,padding:"6px 12px",textAlign:"center"}}>
+                  <span style={{fontSize:22,fontWeight:800,color:col,fontFamily:"'Outfit',sans-serif"}}>{m.marks_obtained}</span>
+                  <span style={{fontSize:12,color:col}}>/{m.total_marks}</span>
+                </div>
+              </div>
+              <div style={{background:C.border,borderRadius:4,height:6,overflow:"hidden"}}>
+                <div style={{width:`${pct}%`,height:6,borderRadius:4,background:col,transition:"width .5s"}}/>
+              </div>
+              <p style={{fontSize:11,color:col,fontWeight:600,marginTop:6,textAlign:"right"}}>{pct}%</p>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── FEES ──────────────────────────────────────────────────────────────────────
+function FeesScreen({user,onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("fees","GET",null,`?student_id=eq.${user.id}&order=due_date.asc`).then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+
+  const total=data.reduce((a,b)=>a+(Number(b.amount)||0),0);
+  const paid=data.filter(f=>f.status==="Paid").reduce((a,b)=>a+(Number(b.amount)||0),0);
+  const partial=data.filter(f=>f.status==="Partial").reduce((a,b)=>a+(Number(b.amount)||0),0);
+  const pending=total-paid-partial;
+  const paidPct=total?Math.round((paid/total)*100):0;
+
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Fees" sub={user.name||user.id} onBack={onBack} accent={C.green}/>
+
+      {data.length>0&&(
+        <div style={{margin:"14px 14px 0"}}>
+          {/* Total fee summary card */}
+          <div style={{background:"linear-gradient(135deg,#065F46,#059669)",borderRadius:18,padding:18,marginBottom:10,position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:-30,right:-30,width:110,height:110,background:"rgba(255,255,255,.07)",borderRadius:55}}/>
+            <p style={{fontSize:11,color:"rgba(255,255,255,.6)",fontWeight:700,letterSpacing:.8,marginBottom:4}}>TOTAL ANNUAL FEES</p>
+            <p style={{fontSize:32,fontWeight:800,color:"#fff",fontFamily:"'Outfit',sans-serif",lineHeight:1}}>₹{total.toLocaleString()}</p>
+            <p style={{fontSize:12,color:"rgba(255,255,255,.55)",marginTop:6}}>{user.name||user.id} · {user.class?`Class ${user.class}`:""}  {user.section||""}</p>
+            {/* Progress bar */}
+            <div style={{marginTop:14,height:5,background:"rgba(255,255,255,.2)",borderRadius:4,overflow:"hidden"}}>
+              <div style={{height:5,width:`${paidPct}%`,background:"#4ADE80",borderRadius:4,transition:"width .6s ease"}}/>
+            </div>
+            <p style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:6}}>{paidPct}% paid</p>
+          </div>
+
+          {/* 3-column breakdown */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:4}}>
+            <div style={{background:C.greenL,borderRadius:14,padding:12,border:`1px solid ${C.green}22`}}>
+              <p style={{fontSize:10,color:C.green,fontWeight:700,marginBottom:3}}>PAID</p>
+              <p style={{fontSize:18,fontWeight:800,color:C.green,fontFamily:"'Outfit',sans-serif"}}>₹{paid.toLocaleString()}</p>
+            </div>
+            {partial>0&&(
+              <div style={{background:C.amberL,borderRadius:14,padding:12,border:`1px solid ${C.amber}22`}}>
+                <p style={{fontSize:10,color:C.amber,fontWeight:700,marginBottom:3}}>PARTIAL</p>
+                <p style={{fontSize:18,fontWeight:800,color:C.amber,fontFamily:"'Outfit',sans-serif"}}>₹{partial.toLocaleString()}</p>
+              </div>
+            )}
+            <div style={{background:C.redL,borderRadius:14,padding:12,border:`1px solid ${C.red}22`}}>
+              <p style={{fontSize:10,color:C.red,fontWeight:700,marginBottom:3}}>PENDING</p>
+              <p style={{fontSize:18,fontWeight:800,color:C.red,fontFamily:"'Outfit',sans-serif"}}>₹{pending.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{padding:"6px 0 24px"}}>
+        <SectionLabel>Fee Breakdown</SectionLabel>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No fee records"/>:
+        data.map((f,i)=>{
+          const [col,bg]=f.status==="Paid"?[C.green,C.greenL]:f.status==="Partial"?[C.amber,C.amberL]:[C.red,C.redL];
+          return(
+            <Card key={f.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{flex:1}}>
+                  <p style={{fontWeight:700,fontSize:14,color:C.t1}}>{f.term}</p>
+                  {f.due_date&&<p style={{fontSize:11,color:C.t3,marginTop:3}}>Due: {f.due_date}</p>}
+                </div>
+                <div style={{textAlign:"right",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                  <p style={{fontWeight:800,fontSize:17,color:C.t1,fontFamily:"'Outfit',sans-serif"}}>₹{Number(f.amount).toLocaleString()}</p>
+                  <Pill color={col} bg={bg}>{f.status}</Pill>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── CALENDAR ──────────────────────────────────────────────────────────────────
+function CalendarScreen({onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("calendar","GET",null,"?order=event_date.asc").then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Academic Calendar" sub={SCHOOL} onBack={onBack} accent={C.rose}/>
+      <div style={{padding:"6px 0 24px"}}>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No events scheduled"/>:
+        data.map((e,i)=>{
+          const d=new Date(e.event_date);
+          return(
+            <Card key={e.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:10}}>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <div style={{background:C.roseL,borderRadius:12,padding:"10px 12px",textAlign:"center",minWidth:50,border:`1px solid ${C.rose}22`}}>
+                  <p style={{fontSize:18,fontWeight:800,color:C.rose,fontFamily:"'Outfit',sans-serif",lineHeight:1}}>{d.getDate()}</p>
+                  <p style={{fontSize:10,color:C.rose,fontWeight:600,marginTop:2}}>{months[d.getMonth()]}</p>
+                </div>
+                <div>
+                  <p style={{fontWeight:700,fontSize:14,color:C.t1}}>{e.event_name}</p>
+                  {e.description&&<p style={{fontSize:12,color:C.t2,marginTop:3,lineHeight:1.5}}>{e.description}</p>}
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── COMMENTS ──────────────────────────────────────────────────────────────────
+function CommentsScreen({user,onBack}){
+  const [data,setData]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("comments","GET",null,`?student_id=eq.${user.id}&order=date.desc`).then(d=>setData(d||[])).finally(()=>setLoading(false));},[]);
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Remarks" sub={user.name||user.id} onBack={onBack} accent={C.sky}/>
+      <div style={{padding:"6px 0 24px"}}>
+        {loading?<EmptyState msg="Loading…"/>:data.length===0?<EmptyState msg="No remarks yet"/>:
+        data.map((c,i)=>(
+          <Card key={c.id} className={`fadeUp d${Math.min(i+1,5)}`} style={{marginTop:10}}>
+            <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{width:36,height:36,borderRadius:10,background:C.skyL,display:"flex",alignItems:"center",justifyContent:"center",color:C.sky,flexShrink:0,fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
+                {(c.from_name||"?")[0].toUpperCase()}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <p style={{fontWeight:700,fontSize:13,color:C.t1}}>{c.from_name}</p>
+                  <p style={{fontSize:11,color:C.t3}}>{c.date}</p>
+                </div>
+                <p style={{fontSize:13,color:C.t2,lineHeight:1.6}}>{c.message}</p>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── TRANSPORT ─────────────────────────────────────────────────────────────────
+function TransportScreen({user,onBack}){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{api("transport","GET",null,`?student_id=eq.${user.id}`).then(d=>setData((d||[])[0]||null)).finally(()=>setLoading(false));},[]);
+  const rows=data?[["Route",data.route],["Driver",data.driver_name],["Driver Phone",data.driver_phone],["Stop",data.stop_name],["Pickup Time",data.pickup_time],["Drop Time",data.drop_time],["Vehicle No",data.vehicle_no]]:[];
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Transport" sub={user.name||user.id} onBack={onBack} accent={C.amber}/>
+      {loading?<EmptyState msg="Loading…"/>:!data?<EmptyState msg="No transport details found"/>:
+      <div style={{padding:"14px 0 24px"}}>
+        <div style={{margin:"0 14px 10px",background:C.amberL,borderRadius:16,padding:16,border:`1px solid ${C.amber}33`}}>
+          <p style={{fontSize:11,color:C.amber,fontWeight:700,marginBottom:4}}>YOUR ROUTE</p>
+          <p style={{fontSize:20,fontWeight:800,color:C.t1,fontFamily:"'Outfit',sans-serif"}}>{data.route||"—"}</p>
+        </div>
+        <Card>
+          {rows.filter(([,v])=>v).map(([k,v],i,arr)=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+              <span style={{fontSize:12,color:C.t3,fontWeight:500}}>{k}</span>
+              <span style={{fontWeight:600,fontSize:13,color:C.t1}}>{v}</span>
+            </div>
+          ))}
+        </Card>
+      </div>}
+    </div>
+  );
+}
+
+// ─── PROFILE ───────────────────────────────────────────────────────────────────
+function ProfileScreen({user,onBack}){
+  const fields=[["Full Name",user.name],["Class",user.class],["Section",user.section],["Father's Name",user.father_name],["Mother's Name",user.mother_name],["Phone",user.phone],["Blood Group",user.blood_group],["Transport",user.transport_opted?"Opted":"Not opted"]];
+  const initials=(user.name||user.id||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Profile" sub="Student Details" onBack={onBack} accent={C.P}/>
+      <div style={{background:"linear-gradient(135deg,#312E81,#4338CA)",padding:"28px 16px 40px",textAlign:"center"}}>
+        <div style={{width:68,height:68,borderRadius:20,background:"rgba(255,255,255,.15)",border:"2px solid rgba(255,255,255,.25)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",fontSize:24,fontWeight:800,color:"#fff",fontFamily:"'Outfit',sans-serif"}}>
+          {initials}
+        </div>
+        <p style={{color:"#fff",fontWeight:800,fontSize:18,fontFamily:"'Outfit',sans-serif"}}>{user.name||user.id}</p>
+        <p style={{color:"rgba(255,255,255,.5)",fontSize:12,marginTop:4}}>ID: {user.id}</p>
+        {user.class&&<div style={{display:"inline-block",background:"rgba(255,255,255,.12)",borderRadius:8,padding:"4px 14px",marginTop:10}}><p style={{color:"rgba(255,255,255,.9)",fontSize:12,fontWeight:600}}>Class {user.class} — {user.section}</p></div>}
+      </div>
+      <Card style={{marginTop:-20,position:"relative",zIndex:1}}>
+        {fields.filter(([,v])=>v).map(([k,v],i,arr)=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+            <span style={{fontSize:12,color:C.t3,fontWeight:500}}>{k}</span>
+            <span style={{fontWeight:600,fontSize:13,color:C.t1,maxWidth:"55%",textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </Card>
+      <div style={{paddingBottom:24}}/>
+    </div>
+  );
+}
+
+// ─── SETTINGS ──────────────────────────────────────────────────────────────────
+function SettingsScreen({user,onBack,onLogout}){
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg}}>
+      <Header title="Settings" onBack={onBack} accent={C.t2}/>
+      <div style={{padding:"14px 0 24px"}}>
+        <Card>
+          <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:16}}>
+            <div style={{width:44,height:44,borderRadius:12,background:C.PL,display:"flex",alignItems:"center",justifyContent:"center",color:C.P,fontSize:18,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
+              {(user.name||user.id||"?")[0].toUpperCase()}
+            </div>
+            <div>
+              <p style={{fontWeight:700,fontSize:14,color:C.t1}}>{user.name||user.id}</p>
+              <p style={{fontSize:12,color:C.t3}}>ID: {user.id}</p>
+            </div>
+          </div>
+          <Btn onClick={onLogout} variant="danger">Sign Out</Btn>
+        </Card>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13,color:C.t1,marginBottom:10}}>About</p>
+          {[["School",SCHOOL],["Address",ADDR],["Version","1.0"],["Plan","Free · Ad-free"]].map(([k,v],i,arr)=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+              <span style={{fontSize:13,color:C.t3}}>{k}</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.t1,maxWidth:"60%",textAlign:"right"}}>{v}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+const SCREENS={announcements:AnnouncementsScreen,homework:HomeworkScreen,attendance:AttendanceScreen,marks:MarksScreen,fees:FeesScreen,calendar:CalendarScreen,comments:CommentsScreen,transport:TransportScreen,profile:ProfileScreen,settings:SettingsScreen};
+
+// ─── ADMIN ─────────────────────────────────────────────────────────────────────
+const UPLOAD_TYPES=[
+  {key:"students",label:"Students",table:"users",note:"id | password | name | class | section | father_name | mother_name | phone | blood_group | transport_opted (Yes/No)"},
+  {key:"attendance",label:"Attendance",table:"attendance",note:"student_id | date (YYYY-MM-DD) | status (Present/Absent/Late)"},
+  {key:"marks",label:"Marks",table:"marks",note:"student_id | subject | exam_type | marks_obtained | total_marks"},
+  {key:"fees",label:"Fees",table:"fees",note:"student_id | term | amount | status (Paid/Unpaid/Partial) | due_date"},
+  {key:"homework",label:"Homework",table:"homework",note:"class | section | subject | task | due_date"},
+  {key:"calendar",label:"Calendar",table:"calendar",note:"event_name | event_date (YYYY-MM-DD) | description"},
+  {key:"comments",label:"Comments",table:"comments",note:"student_id | from_name | message | date"},
+  {key:"transport",label:"Transport",table:"transport",note:"student_id | route | driver_name | driver_phone | stop_name | pickup_time | drop_time | vehicle_no"},
+];
+
+function AdminPanel({user,onLogout}){
+  const [tab,setTab]=useState(null);
+  const [stats,setStats]=useState({total:0,classes:0});
+  const [statsLoading,setStatsLoading]=useState(true);
+
+  useEffect(()=>{
+    api("users","GET",null,"?role=eq.student&select=class")
+      .then(rows=>{
+        const cls=new Set((rows||[]).map(r=>r.class).filter(Boolean));
+        setStats({total:(rows||[]).length,classes:cls.size});
+      }).finally(()=>setStatsLoading(false));
+  },[]);
+
+  if(tab){
+    const inner=tab==="upload"?<AdminUpload/>:tab==="students"?<AdminStudents/>:tab==="homework"?<AdminHomework/>:tab==="post"?<AdminPost/>:tab==="fees"?<AdminFees/>:<AdminManage/>;
+    const labels={upload:"Upload Data",students:"Students",homework:"Homework",post:"Announcements",fees:"Fees",manage:"Manage Records"};
+    return(
+      <div style={{width:"100%",maxWidth:480,margin:"0 auto",minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}}>
+        <div style={{background:"linear-gradient(135deg,#312E81 0%,#4338CA 60%,#6366F1 100%)",padding:"0 16px",height:58,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <button onClick={()=>setTab(null)} style={{width:36,height:36,borderRadius:10,border:"1.5px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.12)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+            {Icon.back}
+          </button>
+          <p style={{color:"#fff",fontWeight:700,fontSize:15,fontFamily:"'Outfit',sans-serif",flex:1}}>{labels[tab]}</p>
+          <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.12)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            {Icon.logout}
+          </button>
+        </div>
+        <div className="fadeUp" style={{flex:1,overflowY:"auto"}}>{inner}</div>
+      </div>
+    );
+  }
+
+  // ── Dashboard home ──
+  const StatCard=({label,value,sub,color,bg,border:bd})=>(
+    <div style={{background:bg,borderRadius:16,padding:16,border:`1.5px solid ${bd||color}22`,flex:1}}>
+      <p style={{fontSize:10,fontWeight:700,color,letterSpacing:.8,marginBottom:6}}>{label}</p>
+      <p style={{fontSize:32,fontWeight:800,color,fontFamily:"'Outfit',sans-serif",lineHeight:1}}>{statsLoading?"…":value}</p>
+      <p style={{fontSize:11,color,opacity:.7,marginTop:5}}>{sub}</p>
+    </div>
+  );
+
+  const ActionBtn=({label,icon,bg,onClick,col2})=>(
+    <button className="press" onClick={onClick}
+      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"15px 12px",borderRadius:14,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer",width:"100%",boxShadow:`0 4px 14px ${bg}55`}}>
+      <span style={{opacity:.95}}>{icon}</span>{label}
+    </button>
+  );
+
+  return(
+    <div style={{width:"100%",maxWidth:480,margin:"0 auto",minHeight:"100vh",background:"#EEF2FF",display:"flex",flexDirection:"column"}}>
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#312E81 0%,#4338CA 60%,#6366F1 100%)",padding:"0 16px",height:58,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <p style={{color:"#fff",fontWeight:700,fontSize:15,fontFamily:"'Outfit',sans-serif"}}>{SCHOOL}</p>
+        <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:20,border:"1.5px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.12)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          {Icon.logout}<span>Logout</span>
+        </button>
+      </div>
+
+      {/* ── Hero Banner (blue, same as before) ── */}
+      <div style={{background:"linear-gradient(160deg,#3730A3 0%,#4338CA 50%,#4F46E5 100%)",padding:"20px 16px 22px",position:"relative",overflow:"hidden",flexShrink:0}}>
+        <div style={{position:"absolute",top:-50,right:-50,width:160,height:160,background:"rgba(255,255,255,.05)",borderRadius:80}}/>
+        <div style={{position:"absolute",bottom:-30,left:120,width:120,height:120,background:"rgba(255,255,255,.04)",borderRadius:60}}/>
+        <div style={{position:"relative",zIndex:1}}>
+          <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12,boxShadow:"0 4px 14px rgba(245,158,11,.4)",color:"#fff"}}>
+            {Icon.settings}
+          </div>
+          <p style={{color:"#fff",fontSize:19,fontWeight:800,fontFamily:"'Outfit',sans-serif",letterSpacing:-.2}}>{SCHOOL}</p>
+          <p style={{color:"rgba(255,255,255,.5)",fontSize:11,marginTop:2}}>{ADDR}</p>
+          <div style={{marginTop:12,display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.12)",borderRadius:20,padding:"5px 14px"}}>
+            <div style={{width:7,height:7,borderRadius:4,background:"#F59E0B",flexShrink:0}}/>
+            <span style={{color:"rgba(255,255,255,.9)",fontSize:12,fontWeight:600}}>{user.name||user.id} — Administrator</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{padding:"14px 14px 10px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <StatCard label="TOTAL STUDENTS" value={stats.total} sub="Enrolled this session" color="#1D4ED8" bg="#EFF6FF" bd="#BFDBFE"/>
+        <StatCard label="CLASSES ACTIVE" value={stats.classes} sub="Across all sections" color="#7C3AED" bg="#F5F3FF" bd="#DDD6FE"/>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{padding:"0 14px",display:"flex",flexDirection:"column",gap:10,paddingBottom:28}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <ActionBtn label="Upload Data" icon={Icon.upload} bg="#1D4ED8" onClick={()=>setTab("upload")}/>
+          <ActionBtn label="Students" icon={Icon.check} bg="#7C3AED" onClick={()=>setTab("students")}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <ActionBtn label="Homework" icon={Icon.book} bg="#059669" onClick={()=>setTab("homework")}/>
+          <ActionBtn label="Announce" icon={Icon.bell} bg="#D97706" onClick={()=>setTab("post")}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <ActionBtn label="Fees" icon={Icon.dollar} bg="#0D9488" onClick={()=>setTab("fees")}/>
+          <ActionBtn label="Manage" icon={Icon.settings} bg="#475569" onClick={()=>setTab("manage")}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminHomework(){
+  const today=new Date().toISOString().split("T")[0];
+  const [classes,setClasses]=useState([]); // [{class,sections:[]}]
+  const [selClass,setSelClass]=useState("");
+  const [selSection,setSelSection]=useState("All");
+  const [subject,setSubject]=useState("");
+  const [task,setTask]=useState("");
+  const [dueDate,setDueDate]=useState(today);
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [list,setList]=useState([]);
+  const [listLoading,setListLoading]=useState(true);
+
+  // Load distinct class+section combos from users table
+  useEffect(()=>{
+    api("users","GET",null,"?role=eq.student&select=class,section&order=class.asc,section.asc")
+      .then(rows=>{
+        const map={};
+        (rows||[]).forEach(r=>{
+          if(!r.class) return;
+          if(!map[r.class]) map[r.class]=new Set();
+          if(r.section) map[r.class].add(r.section);
+        });
+        const arr=Object.entries(map).map(([c,secs])=>({cls:c,sections:["All",...Array.from(secs).sort()]}));
+        setClasses(arr);
+        if(arr.length>0){setSelClass(arr[0].cls);setSelSection("All");}
+      });
+    loadList();
+  },[]);
+
+  const loadList=()=>{
+    setListLoading(true);
+    api("homework","GET",null,"?order=due_date.desc&limit=30")
+      .then(d=>setList(d||[]))
+      .finally(()=>setListLoading(false));
+  };
+
+  const sections=classes.find(c=>c.cls===selClass)?.sections||["All"];
+
+  const submit=async()=>{
+    if(!selClass) return setMsg("No classes found — upload students first");
+    if(!subject.trim()) return setMsg("Enter a subject");
+    if(!task.trim()) return setMsg("Enter the homework task");
+    setLoading(true); setMsg("");
+    try{
+      const body={class:selClass,section:selSection==="All"?null:selSection,subject:subject.trim(),task:task.trim(),due_date:dueDate};
+      await api("homework","POST",body,""," return=minimal");
+      setMsg("Homework assigned!");
+      setSubject(""); setTask(""); setDueDate(today);
+      loadList();
+    }catch{setMsg("Failed to assign homework");}
+    finally{setLoading(false);}
+  };
+
+  const del=async(id)=>{
+    await api("homework","DELETE",null,`?id=eq.${id}`);
+    setList(list.filter(h=>h.id!==id));
+  };
+
+  // Group list by date
+  const grouped=list.reduce((acc,h)=>{
+    const k=h.due_date||"No date";
+    if(!acc[k]) acc[k]=[];
+    acc[k].push(h); return acc;
+  },{});
+
+  return(
+    <div style={{padding:14,paddingBottom:32}}>
+
+      {/* ── Assign form ── */}
+      <div style={{background:"#fff",borderRadius:16,padding:16,border:`1px solid ${C.border}`,marginBottom:14}}>
+        <p style={{fontWeight:800,fontSize:15,color:C.t1,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{width:30,height:30,borderRadius:8,background:C.blueL,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.blue,flexShrink:0}}>{Icon.book}</span>
+          Assign Homework
+        </p>
+
+        {/* Class selector */}
+        <p style={{fontSize:12,fontWeight:700,color:C.t2,marginBottom:8}}>Select Class</p>
+        {classes.length===0
+          ? <div style={{background:C.amberL,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:C.amber,fontWeight:500,display:"flex",gap:6,alignItems:"center"}}>{Icon.info} No classes found. Upload students first.</div>
+          : <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:14}}>
+              {classes.map(c=>(
+                <button key={c.cls} onClick={()=>{setSelClass(c.cls);setSelSection("All");}}
+                  style={{padding:"7px 16px",borderRadius:20,border:`1.5px solid ${selClass===c.cls?C.blue:C.border}`,background:selClass===c.cls?C.blueL:"#fff",color:selClass===c.cls?C.blue:C.t2,fontWeight:700,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
+                  Class {c.cls}
+                </button>
+              ))}
+            </div>
+        }
+
+        {/* Section selector */}
+        {selClass&&(
+          <>
+            <p style={{fontSize:12,fontWeight:700,color:C.t2,marginBottom:8}}>Select Section</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:14}}>
+              {sections.map(s=>(
+                <button key={s} onClick={()=>setSelSection(s)}
+                  style={{padding:"7px 16px",borderRadius:20,border:`1.5px solid ${selSection===s?C.P:C.border}`,background:selSection===s?C.PL:"#fff",color:selSection===s?C.P:C.t2,fontWeight:700,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
+                  {s==="All"?"All Sections":s}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Subject */}
+        <Input label="Subject" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Mathematics"/>
+
+        {/* Task */}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:12,fontWeight:600,color:C.t2,display:"block",marginBottom:5}}>Homework Task</label>
+          <textarea value={task} onChange={e=>setTask(e.target.value)} placeholder="Describe the homework…"
+            style={{width:"100%",padding:"11px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,color:C.t1,background:"#fff",height:90,resize:"none",lineHeight:1.6}}/>
+        </div>
+
+        {/* Due Date */}
+        <Input type="date" label="Due Date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/>
+
+        {msg&&(
+          <div style={{background:msg.includes("!")?C.greenL:C.amberL,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:msg.includes("!")?C.green:C.amber,fontWeight:500,display:"flex",gap:6,alignItems:"center"}}>
+            {Icon.info}{msg}
+          </div>
+        )}
+
+        <Btn onClick={submit} disabled={loading||!selClass}>
+          {loading?"Assigning…":"Assign Homework"}
+        </Btn>
+      </div>
+
+      {/* ── Recent homework list ── */}
+      <SectionLabel>Recent Homework</SectionLabel>
+      {listLoading?<EmptyState msg="Loading…"/>:list.length===0?<EmptyState msg="No homework assigned yet"/>:
+      Object.entries(grouped).map(([date,items])=>(
+        <div key={date} style={{marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,padding:"0 2px"}}>
+            <div style={{width:28,height:28,borderRadius:8,background:C.blueL,display:"flex",alignItems:"center",justifyContent:"center",color:C.blue,flexShrink:0}}>{Icon.cal}</div>
+            <p style={{fontSize:12,fontWeight:700,color:C.blue}}>Due {date}</p>
+          </div>
+          {items.map(h=>(
+            <div key={h.id} style={{background:"#fff",borderRadius:12,padding:"12px 12px",marginBottom:6,border:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:5}}>
+                  <Pill color={C.blue} bg={C.blueL}>{h.subject}</Pill>
+                  <Pill color={C.P} bg={C.PL}>Class {h.class}{h.section?` · ${h.section}`:""}</Pill>
+                </div>
+                <p style={{fontSize:13,color:C.t2,lineHeight:1.55,marginTop:4}}>{h.task}</p>
+              </div>
+              <button onClick={()=>del(h.id)} style={{width:32,height:32,borderRadius:8,background:C.redL,border:"none",color:C.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {Icon.trash}
+              </button>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AdminUpload(){
+  const [type,setType]=useState("students");
+  const [file,setFile]=useState(null);
+  const [preview,setPreview]=useState(null);
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+  const chosen=UPLOAD_TYPES.find(t=>t.key===type);
+
+  const handleFile=async(e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    setFile(f); setMsg(""); setPreview(null);
+    try{const rows=await parseXLSX(f);setPreview(rows.slice(0,2));}catch{setMsg("Could not read file");}
+  };
+
+  const upload=async()=>{
+    if(!file) return; setLoading(true); setMsg("");
+    try{
+      const rows=await parseXLSX(file);
+      let processed=rows;
+      if(type==="students") processed=rows.map(r=>({...r,role:"student",transport_opted:String(r.transport_opted||"").toLowerCase()==="yes"}));
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/${chosen.table}${type==="students"?"?on_conflict=id":""}`,{
+        method:"POST",
+        headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json",Prefer:type==="students"?"resolution=merge-duplicates":"return=minimal"},
+        body:JSON.stringify(processed)
+      });
+      if(!res.ok) throw new Error(await res.text());
+      setMsg(`${rows.length} ${chosen.label} records uploaded successfully`);
+      setFile(null); setPreview(null);
+    }catch(e){setMsg("Upload failed: "+e.message);}
+    finally{setLoading(false);}
+  };
+
+  return(
+    <div style={{padding:14}}>
+
+      {/* ── Upload zone FIRST ── */}
+      <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,width:"100%",padding:20,borderRadius:14,border:`2px dashed ${file?C.P:C.border}`,background:file?C.PL:"#fff",color:C.t2,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:12,textAlign:"center",transition:"all .15s"}}>
+        <div style={{width:44,height:44,borderRadius:12,background:file?C.P:C.PL,display:"flex",alignItems:"center",justifyContent:"center",color:file?"#fff":C.P,transition:"all .15s"}}>
+          {Icon.upload}
+        </div>
+        <span style={{color:file?C.P:C.t2}}>{file?file.name:"Tap to choose Excel file (.xlsx)"}</span>
+        <span style={{fontSize:11,color:C.t3,fontWeight:400}}>Supported: .xlsx, .xls</span>
+        <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={handleFile}/>
+      </label>
+
+      {preview&&(
+        <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
+          <p style={{fontWeight:700,fontSize:12,color:C.t2,marginBottom:6}}>Preview (first 2 rows)</p>
+          {preview.map((row,i)=><p key={i} style={{fontSize:10,color:C.t3,lineHeight:1.5,wordBreak:"break-all",marginBottom:4,fontFamily:"monospace"}}>{JSON.stringify(row)}</p>)}
+        </div>
+      )}
+
+      {/* ── Type selector ── */}
+      <SectionLabel>Select Data Type</SectionLabel>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        {UPLOAD_TYPES.map(t=>(
+          <button key={t.key} onClick={()=>{setType(t.key);setFile(null);setPreview(null);setMsg("");}}
+            style={{padding:"10px 8px",borderRadius:12,border:`1.5px solid ${type===t.key?C.P:C.border}`,background:type===t.key?C.PL:"#fff",color:type===t.key?C.P:C.t2,fontWeight:600,fontSize:12,cursor:"pointer",transition:"all .15s"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{background:C.PL,borderRadius:12,padding:12,marginBottom:12,border:`1px solid ${C.P}33`,display:"flex",gap:8}}>
+        <div style={{color:C.P,flexShrink:0,marginTop:1}}>{Icon.info}</div>
+        <div>
+          <p style={{fontSize:11,fontWeight:700,color:C.P,marginBottom:3}}>Required columns for {chosen.label}</p>
+          <p style={{fontSize:11,color:C.t2,lineHeight:1.7}}>{chosen.note}</p>
+        </div>
+      </div>
+
+      {msg&&<div style={{background:msg.includes("successfully")?C.greenL:C.redL,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:msg.includes("successfully")?C.green:C.red,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
+        {Icon.info}{msg}
+      </div>}
+
+      {file&&<Btn onClick={upload} disabled={loading}>{Icon.upload}{loading?"Uploading…":"Upload "+chosen.label}</Btn>}
+    </div>
+  );
+}
+
+function AdminStudents(){
+  const [students,setStudents]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState("");
+  const [confirm,setConfirm]=useState(null); // student to delete
+  const [deleting,setDeleting]=useState(false);
+  useEffect(()=>{api("users","GET",null,"?role=eq.student&order=name.asc").then(d=>setStudents(d||[])).finally(()=>setLoading(false));},[]);
+  const filtered=students.filter(s=>(s.name||"").toLowerCase().includes(search.toLowerCase())||(s.id||"").toLowerCase().includes(search.toLowerCase())||(s.class||"").toLowerCase().includes(search.toLowerCase()));
+
+  const removeStudent=async()=>{
+    if(!confirm) return;
+    setDeleting(true);
+    try{
+      // Delete the user and cascade their related records
+      await api("users","DELETE",null,`?id=eq.${confirm.id}`);
+      setStudents(students.filter(s=>s.id!==confirm.id));
+      setConfirm(null);
+    }catch(e){alert("Failed to remove student");}
+    finally{setDeleting(false);}
+  };
+
+  return(
+    <div style={{padding:14}}>
+      {/* Confirm delete modal */}
+      {confirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0 0 24px"}}>
+          <div className="fadeUp" style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:460,margin:"0 14px",boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}>
+            <div style={{width:48,height:48,borderRadius:14,background:C.redL,display:"flex",alignItems:"center",justifyContent:"center",color:C.red,margin:"0 auto 14px"}}>
+              {Icon.trash}
+            </div>
+            <p style={{fontWeight:800,fontSize:16,color:C.t1,textAlign:"center",marginBottom:6}}>Remove Student?</p>
+            <p style={{fontSize:13,color:C.t2,textAlign:"center",lineHeight:1.6,marginBottom:20}}>
+              <strong>{confirm.name||confirm.id}</strong> (ID: {confirm.id}) will be permanently removed. This cannot be undone.
+            </p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Btn variant="ghost" onClick={()=>setConfirm(null)}>Cancel</Btn>
+              <Btn variant="danger" onClick={removeStudent} disabled={deleting}>{deleting?"Removing…":"Yes, Remove"}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{position:"relative",marginBottom:10}}>
+        <div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:C.t3}}>{Icon.search}</div>
+        <input style={{width:"100%",padding:"11px 14px 11px 36px",borderRadius:12,border:`1.5px solid ${C.border}`,fontSize:13,color:C.t1,background:"#fff"}} placeholder="Search by name, ID or class…" value={search} onChange={e=>setSearch(e.target.value)}/>
+      </div>
+      <p style={{fontSize:12,color:C.t3,marginBottom:10,fontWeight:500}}>{filtered.length} students</p>
+      {loading?<EmptyState msg="Loading…"/>:filtered.length===0?<EmptyState msg="No students found"/>:
+      filtered.map(st=>(
+        <div key={st.id} style={{background:"#fff",borderRadius:12,padding:12,marginBottom:8,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+            <div style={{width:38,height:38,borderRadius:10,background:C.PL,display:"flex",alignItems:"center",justifyContent:"center",color:C.P,fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
+              {(st.name||st.id||"?")[0].toUpperCase()}
+            </div>
+            <div style={{minWidth:0}}>
+              <p style={{fontWeight:700,fontSize:13,color:C.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{st.name||"—"}</p>
+              <p style={{fontSize:11,color:C.t3}}>ID: {st.id} · Class {st.class||"—"} {st.section||""}</p>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            {st.transport_opted&&<Pill color={C.amber} bg={C.amberL}>Bus</Pill>}
+            <button onClick={()=>setConfirm(st)} style={{width:34,height:34,borderRadius:8,background:C.redL,border:"none",color:C.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {Icon.trash}
+            </button>
+          </div>
+        </div>
+      ))}
+      <div style={{paddingBottom:16}}/>
+    </div>
+  );
+}
+
+function AdminPost(){
+  const [title,setTitle]=useState("");
+  const [desc,setDesc]=useState("");
+  const [date,setDate]=useState(new Date().toISOString().split("T")[0]);
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [list,setList]=useState([]);
+  const load=()=>api("announcements","GET",null,"?order=date.desc&limit=15").then(d=>setList(d||[]));
+  useEffect(()=>{load();},[]);
+  const post=async()=>{
+    if(!title.trim()) return setMsg("Enter a title");
+    setLoading(true);
+    try{await api("announcements","POST",{title:title.trim(),description:desc.trim()||null,date});setMsg("Posted successfully");setTitle("");setDesc("");load();}
+    catch{setMsg("Failed to post");}
+    finally{setLoading(false);}
+  };
+  const del=async(id)=>{await api("announcements","DELETE",null,`?id=eq.${id}`);setList(list.filter(a=>a.id!==id));};
+  return(
+    <div style={{padding:14}}>
+      <Card style={{margin:"0 0 14px"}}>
+        <p style={{fontWeight:700,fontSize:14,color:C.t1,marginBottom:12}}>New Announcement</p>
+        <Input label="Title" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Enter title"/>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:12,fontWeight:600,color:C.t2,display:"block",marginBottom:5}}>Description (optional)</label>
+          <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Add details…"
+            style={{width:"100%",padding:"11px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,color:C.t1,background:"#fff",height:80,resize:"none"}}/>
+        </div>
+        <Input type="date" label="Date" value={date} onChange={e=>setDate(e.target.value)}/>
+        {msg&&<div style={{background:msg.includes("success")?C.greenL:C.redL,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:msg.includes("success")?C.green:C.red,fontWeight:500,display:"flex",gap:6,alignItems:"center"}}>{Icon.info}{msg}</div>}
+        <Btn onClick={post} disabled={loading}>{loading?"Posting…":"Post Announcement"}</Btn>
+      </Card>
+      <SectionLabel>Recent Posts</SectionLabel>
+      {list.map(a=>(
+        <div key={a.id} style={{background:"#fff",borderRadius:12,padding:12,marginBottom:8,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <div style={{flex:1}}>
+            <p style={{fontWeight:700,fontSize:13,color:C.t1}}>{a.title}</p>
+            <p style={{fontSize:11,color:C.t3,marginTop:2}}>{a.date}</p>
+          </div>
+          <button onClick={()=>del(a.id)} style={{width:34,height:34,borderRadius:8,background:C.redL,border:"none",color:C.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {Icon.trash}
+          </button>
+        </div>
+      ))}
+      <div style={{paddingBottom:16}}/>
+    </div>
+  );
+}
+
+function AdminManage(){
+  const [section,setSection]=useState("homework");
+  const [list,setList]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const tables={homework:"homework",calendar:"calendar",comments:"comments",fees:"fees"};
+  const load=async(sec)=>{setLoading(true);setList([]);try{const d=await api(tables[sec],"GET",null,"?order=created_at.desc&limit=20");setList(d||[]);}finally{setLoading(false);}};
+  useEffect(()=>{load(section);},[section]);
+  const del=async(id)=>{await api(tables[section],"DELETE",null,`?id=eq.${id}`);setList(list.filter(i=>i.id!==id));};
+  const renderItem=(item)=>{
+    if(section==="homework") return `${item.class} · ${item.subject} · ${item.task}`;
+    if(section==="calendar") return `${item.event_date} · ${item.event_name}`;
+    if(section==="comments") return `${item.student_id} · ${item.from_name}: ${item.message}`;
+    if(section==="fees") return `${item.student_id} · ${item.term} · ₹${item.amount} · ${item.status}`;
+    return "";
+  };
+  return(
+    <div style={{padding:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        {Object.keys(tables).map(k=>(
+          <button key={k} onClick={()=>setSection(k)}
+            style={{padding:"10px 8px",borderRadius:12,border:`1.5px solid ${section===k?C.P:C.border}`,background:section===k?C.PL:"#fff",color:section===k?C.P:C.t2,fontWeight:600,fontSize:12,cursor:"pointer",transition:"all .15s"}}>
+            {k.charAt(0).toUpperCase()+k.slice(1)}
+          </button>
+        ))}
+      </div>
+      {loading?<EmptyState msg="Loading…"/>:list.length===0?<EmptyState msg="No records found"/>:
+      list.map(item=>(
+        <div key={item.id} style={{background:"#fff",borderRadius:12,padding:12,marginBottom:8,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <p style={{fontSize:12,color:C.t2,flex:1,lineHeight:1.6}}>{renderItem(item)}</p>
+          <button onClick={()=>del(item.id)} style={{width:34,height:34,borderRadius:8,background:C.redL,border:"none",color:C.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {Icon.trash}
+          </button>
+        </div>
+      ))}
+      <div style={{paddingBottom:16}}/>
+    </div>
+  );
+}
+
+// ─── ADMIN FEES ────────────────────────────────────────────────────────────────
+function AdminFees(){
+  const [students,setStudents]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState("");
+  const [selected,setSelected]=useState(null); // student object
+  const [fees,setFees]=useState([]);
+  const [feesLoading,setFeesLoading]=useState(false);
+
+  useEffect(()=>{
+    api("users","GET",null,"?role=eq.student&order=name.asc")
+      .then(d=>setStudents(d||[]))
+      .finally(()=>setLoading(false));
+  },[]);
+
+  const openStudent=async(st)=>{
+    setSelected(st); setFees([]); setFeesLoading(true);
+    api("fees","GET",null,`?student_id=eq.${st.id}&order=due_date.asc`)
+      .then(d=>setFees(d||[]))
+      .finally(()=>setFeesLoading(false));
+  };
+
+  const delFee=async(id)=>{
+    await api("fees","DELETE",null,`?id=eq.${id}`);
+    setFees(fees.filter(f=>f.id!==id));
+  };
+
+  const filtered=students.filter(s=>
+    (s.name||"").toLowerCase().includes(search.toLowerCase())||
+    (s.id||"").toLowerCase().includes(search.toLowerCase())||
+    (s.class||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  // ── Student fee detail view ──
+  if(selected){
+    const total=fees.reduce((a,b)=>a+(Number(b.amount)||0),0);
+    const paid=fees.filter(f=>f.status==="Paid").reduce((a,b)=>a+(Number(b.amount)||0),0);
+    const pending=total-paid;
+    const pct=total?Math.round((paid/total)*100):0;
+    return(
+      <div style={{paddingBottom:32}}>
+        {/* Student header */}
+        <div style={{background:"linear-gradient(135deg,#1e3a5f,#1D4ED8)",margin:"14px 14px 0",borderRadius:16,padding:16}}>
+          <button onClick={()=>setSelected(null)} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",marginBottom:12}}>
+            {Icon.back}<span>All Students</span>
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:18,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
+              {(selected.name||selected.id||"?")[0].toUpperCase()}
+            </div>
+            <div>
+              <p style={{color:"#fff",fontWeight:800,fontSize:15,fontFamily:"'Outfit',sans-serif"}}>{selected.name||"—"}</p>
+              <p style={{color:"rgba(255,255,255,.6)",fontSize:11,marginTop:2}}>ID: {selected.id} · Class {selected.class||"—"} {selected.section||""}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary */}
+        {fees.length>0&&(
+          <div style={{margin:"10px 14px 0"}}>
+            <div style={{background:"#fff",borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div>
+                  <p style={{fontSize:11,color:C.t3,fontWeight:600}}>TOTAL FEES</p>
+                  <p style={{fontSize:26,fontWeight:800,color:C.t1,fontFamily:"'Outfit',sans-serif"}}>₹{total.toLocaleString()}</p>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <p style={{fontSize:11,color:C.green,fontWeight:600}}>PAID</p>
+                  <p style={{fontSize:20,fontWeight:800,color:C.green,fontFamily:"'Outfit',sans-serif"}}>₹{paid.toLocaleString()}</p>
+                </div>
+              </div>
+              <div style={{height:6,background:C.border,borderRadius:4,overflow:"hidden",marginBottom:6}}>
+                <div style={{height:6,width:`${pct}%`,background:C.green,borderRadius:4,transition:"width .5s"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <p style={{fontSize:11,color:C.green,fontWeight:600}}>{pct}% paid</p>
+                <p style={{fontSize:11,color:C.red,fontWeight:600}}>₹{pending.toLocaleString()} pending</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fee records */}
+        <SectionLabel>Fee Records</SectionLabel>
+        {feesLoading?<EmptyState msg="Loading…"/>:fees.length===0?<EmptyState msg="No fee records for this student"/>:
+        fees.map((f,i)=>{
+          const [col,bg]=f.status==="Paid"?[C.green,C.greenL]:f.status==="Partial"?[C.amber,C.amberL]:[C.red,C.redL];
+          return(
+            <div key={f.id} style={{background:"#fff",borderRadius:12,padding:12,margin:"0 14px 8px",border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:14,color:C.t1}}>{f.term}</p>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                  <Pill color={col} bg={bg}>{f.status}</Pill>
+                  {f.due_date&&<span style={{fontSize:11,color:C.t3}}>Due {f.due_date}</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                <p style={{fontWeight:800,fontSize:16,color:C.t1,fontFamily:"'Outfit',sans-serif"}}>₹{Number(f.amount).toLocaleString()}</p>
+                <button onClick={()=>delFee(f.id)} style={{width:32,height:32,borderRadius:8,background:C.redL,border:"none",color:C.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {Icon.trash}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Student list ──
+  return(
+    <div style={{padding:14,paddingBottom:32}}>
+      <div style={{position:"relative",marginBottom:10}}>
+        <div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:C.t3}}>{Icon.search}</div>
+        <input style={{width:"100%",padding:"11px 14px 11px 36px",borderRadius:12,border:`1.5px solid ${C.border}`,fontSize:13,color:C.t1,background:"#fff"}} placeholder="Search by name, ID or class…" value={search} onChange={e=>setSearch(e.target.value)}/>
+      </div>
+      <p style={{fontSize:12,color:C.t3,marginBottom:10,fontWeight:500}}>{filtered.length} students</p>
+      {loading?<EmptyState msg="Loading…"/>:filtered.length===0?<EmptyState msg="No students found"/>:
+      filtered.map(st=>(
+        <button key={st.id} onClick={()=>openStudent(st)}
+          style={{width:"100%",background:"#fff",borderRadius:12,padding:12,marginBottom:8,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,cursor:"pointer",textAlign:"left"}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+            <div style={{width:40,height:40,borderRadius:10,background:C.tealL,display:"flex",alignItems:"center",justifyContent:"center",color:C.teal,fontSize:15,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
+              {(st.name||st.id||"?")[0].toUpperCase()}
+            </div>
+            <div style={{minWidth:0}}>
+              <p style={{fontWeight:700,fontSize:13,color:C.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{st.name||"—"}</p>
+              <p style={{fontSize:11,color:C.t3}}>ID: {st.id} · Class {st.class||"—"} {st.section||""}</p>
+            </div>
+          </div>
+          <div style={{color:C.t3,flexShrink:0}}>{Icon.back}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── ROOT ──────────────────────────────────────────────────────────────────────
+function App(){
+  const [user,setUser]=useState(()=>{try{return JSON.parse(localStorage.getItem("cps_user"));}catch{return null;}});
+  const onLogin=u=>setUser(u);
+  const onLogout=()=>{localStorage.removeItem("cps_user");setUser(null);};
+  if(!user) return <Login onLogin={onLogin}/>;
+  if(user.role==="admin") return <AdminPanel user={user} onLogout={onLogout}/>;
+  return <StudentDash user={user} onLogout={onLogout}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
